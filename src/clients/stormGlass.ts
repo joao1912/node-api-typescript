@@ -1,5 +1,6 @@
 import { InternalError } from "@src/util/errors/internal-error";
-import { Axios, AxiosError } from "axios"
+import * as HTTPUtil from "@src/util/request";
+import config, { IConfig } from "config";
 
 export interface StormGlassPointSource {
     [key: string]: number;
@@ -52,32 +53,35 @@ export class StormGlassResponseError extends InternalError {
     }
 }
 
+const stormGlassResourceConfig: IConfig = config.get('App.resources.StormGlass')
+
 export class StormGlass {
     readonly stormGlassAPIParams = 'swellDirection,swellHeight,swellPeriod,waveDirection,waveHeight,windDirection,windSpeed'
     readonly stormGlassAPISource = 'noaa'
 
-    constructor( protected request: Axios ) {}
+    constructor( protected request = new HTTPUtil.Request()) {}
 
     public async fetchPoints(lat: number, lng: number): Promise<ForecastPoint[]> {
 
         try {
             const response = await this.request.get<StormGlassForecastResponse>(
-                `https://api.stormglass.io/v2/weather/point?params=${this.stormGlassAPIParams}&source=${this.stormGlassAPISource}&end=1592113802&lat=${lat}&lng=${lng}`,
+                `${stormGlassResourceConfig.get('apiUrl')}/weather/point?params=${this.stormGlassAPIParams}&source=${this.stormGlassAPISource}&end=1592113802&lat=${lat}&lng=${lng}`,
                 {
                     headers: {
-                        Authorization: "fake-token"
+                        Authorization: stormGlassResourceConfig.get('apiToken')
                     }
                 }
             );
 
             return this.normalizeReponse(response.data)
        
-        } catch (err: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (err: any) {
             
-            if ((err as AxiosError).response && (err as AxiosError).response?.data) {
+            if (HTTPUtil.Request.isRequestError(err)) {
               throw new StormGlassResponseError(
-                `Error: ${JSON.stringify((err as AxiosError).response?.data)} Code: ${
-                  (err as AxiosError).response?.status
+                `Error: ${JSON.stringify(err.response?.data)} Code: ${
+                  err.response?.status
                 }`
               );
             }
